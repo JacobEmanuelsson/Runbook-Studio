@@ -9,9 +9,10 @@
 
 ## Phase 2: Persistence And Auth
 
-- Add Better Auth.
-- Add organization membership and role checks.
-- Persist services, runbooks, incidents, notes, and timeline events in PostgreSQL.
+- Add Better Auth. Done.
+- Add Prisma/PostgreSQL schema for organization membership and incident data. Done.
+- Add a database seed script for the demo workspace. Done.
+- Persist services, runbooks, incidents, notes, and timeline events in PostgreSQL-backed pages.
 - Move client mutations into server actions with Zod validation.
 
 ## Phase 3: Operational Automation
@@ -32,4 +33,3 @@
 - Add MTTR trends.
 - Track runbook completion rates.
 - Surface noisy services and recurring incident categories.
-

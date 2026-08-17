@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -10,8 +11,8 @@ import {
   Circle,
   Clock3,
   Gauge,
-  Layers3,
   ListChecks,
+  LogIn,
   PauseCircle,
   Play,
   Plus,
@@ -21,7 +22,6 @@ import {
   ShieldCheck,
   TimerReset,
   UserRound,
-  XCircle,
 } from "lucide-react";
 import { formatMinutes, formatShortDate } from "@/lib/format";
 import {
@@ -231,10 +231,16 @@ export function RunbookStudio() {
             <p className="eyebrow">Operations</p>
             <h1>Incident command</h1>
           </div>
-          <button className="primary-action" type="button" onClick={() => handleLaunchRunbook(runbooks[0])}>
-            <Plus size={18} aria-hidden="true" />
-            <span>New incident</span>
-          </button>
+          <div className="topbar-actions">
+            <Link className="secondary-action" href="/sign-in">
+              <LogIn size={18} aria-hidden="true" />
+              <span>Sign in</span>
+            </Link>
+            <button className="primary-action" type="button" onClick={() => handleLaunchRunbook(runbooks[0])}>
+              <Plus size={18} aria-hidden="true" />
+              <span>New incident</span>
+            </button>
+          </div>
         </header>
 
         <section className="metric-grid" aria-label="Operational metrics">
