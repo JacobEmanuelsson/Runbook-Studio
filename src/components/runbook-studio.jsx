@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   Check,
   CheckCircle2,
   Circle,
   Clock3,
+  FilePlus2,
   Gauge,
   ListChecks,
   LogIn,
@@ -19,10 +22,12 @@ import {
   Play,
   Plus,
   Radio,
+  Save,
   Send,
   Server,
   ShieldCheck,
   TimerReset,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import {
@@ -32,7 +37,9 @@ import {
   resolveIncidentAction,
   updateIncidentStepAction,
 } from "@/server/incidents/incident-actions";
+import { deleteRunbookAction, saveRunbookAction } from "@/server/runbooks/runbook-actions";
 import { authClient } from "@/lib/auth-client";
+import { saveRunbookSchema } from "@/domain/runbooks/schema";
 import { formatMinutes, formatShortDate } from "@/lib/format";
 import {
   buildServiceHealth,
@@ -88,12 +95,17 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
   const isDatabaseMode = mode === "database";
   const isBusy = isPending || isMutating;
   const servicesData = dashboard.services ?? demoServices;
-  const runbooksData = dashboard.runbooks ?? demoRunbooks;
   const membersData = dashboard.teamMembers ?? demoTeamMembers;
   const actorId = currentUser?.id ?? DEMO_USER_ID;
   const workspaceName = dashboard.organization?.name ?? "Local demo";
   const [incidents, setIncidents] = useState(dashboard.incidents ?? demoIncidents);
+  const [runbooksState, setRunbooksState] = useState(dashboard.runbooks ?? demoRunbooks);
+  const runbooksData = runbooksState;
   const [selectedIncidentId, setSelectedIncidentId] = useState(dashboard.incidents?.[0]?.id ?? demoIncidents[0]?.id ?? null);
+  const [selectedRunbookId, setSelectedRunbookId] = useState((dashboard.runbooks ?? demoRunbooks)[0]?.id ?? null);
+  const [runbookDraft, setRunbookDraft] = useState(() =>
+    cloneRunbook((dashboard.runbooks ?? demoRunbooks)[0] ?? createBlankRunbook(servicesData)),
+  );
   const [activePanel, setActivePanel] = useState("command");
   const [noteDraft, setNoteDraft] = useState("");
   const [resolveError, setResolveError] = useState("");
@@ -101,7 +113,9 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
   const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
-    const nextIncidents = isDatabaseMode ? dashboard.incidents ?? [] : loadStoredIncidents() ?? dashboard.incidents ?? demoIncidents;
+    const storedDashboard = isDatabaseMode ? null : loadStoredDashboard();
+    const nextIncidents = isDatabaseMode ? dashboard.incidents ?? [] : storedDashboard?.incidents ?? dashboard.incidents ?? demoIncidents;
+    const nextRunbooks = isDatabaseMode ? dashboard.runbooks ?? [] : storedDashboard?.runbooks ?? dashboard.runbooks ?? demoRunbooks;
     let cancelled = false;
 
     queueMicrotask(() => {
@@ -110,12 +124,20 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
       }
 
       setIncidents(nextIncidents);
+      setRunbooksState(nextRunbooks);
       setSelectedIncidentId((currentId) => {
         if (currentId && nextIncidents.some((incident) => incident.id === currentId)) {
           return currentId;
         }
 
         return nextIncidents[0]?.id ?? null;
+      });
+      setSelectedRunbookId((currentId) => {
+        if (currentId && nextRunbooks.some((runbook) => runbook.id === currentId)) {
+          return currentId;
+        }
+
+        return nextRunbooks[0]?.id ?? null;
       });
       setStorageReady(true);
     });
@@ -126,12 +148,28 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
   }, [dashboard, isDatabaseMode]);
 
   useEffect(() => {
+    const selectedRunbook = runbooksData.find((runbook) => runbook.id === selectedRunbookId);
+    const nextDraft = cloneRunbook(selectedRunbook ?? createBlankRunbook(servicesData));
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setRunbookDraft(nextDraft);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runbooksData, selectedRunbookId, servicesData]);
+
+  useEffect(() => {
     if (!storageReady || isDatabaseMode) {
       return;
     }
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ incidents }));
-  }, [incidents, isDatabaseMode, storageReady]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ incidents, runbooks: runbooksData }));
+  }, [incidents, isDatabaseMode, runbooksData, storageReady]);
 
   const activeIncidents = useMemo(() => getActiveIncidents(incidents), [incidents]);
   const serviceHealth = useMemo(() => buildServiceHealth(servicesData, incidents), [incidents, servicesData]);
@@ -175,6 +213,135 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
     setResolveError("");
     setActionError("");
     setIncidents((current) => current.map((incident) => (incident.id === incidentId ? updater(incident) : incident)));
+  }
+
+  function handleNewRunbook() {
+    setActionError("");
+    setSelectedRunbookId(null);
+    setRunbookDraft(createBlankRunbook(servicesData));
+  }
+
+  function handleSelectRunbook(runbookId) {
+    setActionError("");
+    setSelectedRunbookId(runbookId);
+  }
+
+  function handleRunbookField(field, value) {
+    setActionError("");
+    setRunbookDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleRunbookStep(index, field, value) {
+    setActionError("");
+    setRunbookDraft((current) => ({
+      ...current,
+      steps: current.steps.map((step, stepIndex) => (stepIndex === index ? { ...step, [field]: value } : step)),
+    }));
+  }
+
+  function handleAddRunbookStep() {
+    setActionError("");
+    setRunbookDraft((current) => ({
+      ...current,
+      steps: [
+        ...current.steps,
+        {
+          id: nextDraftStepId(current.steps),
+          title: "New checklist step",
+          detail: "Describe the operational check or mitigation.",
+          role: "Incident commander",
+          required: true,
+          timeboxMinutes: 5,
+        },
+      ],
+    }));
+  }
+
+  function handleMoveRunbookStep(index, direction) {
+    setActionError("");
+    setRunbookDraft((current) => {
+      const nextIndex = index + direction;
+
+      if (nextIndex < 0 || nextIndex >= current.steps.length) {
+        return current;
+      }
+
+      const steps = [...current.steps];
+      const [step] = steps.splice(index, 1);
+      steps.splice(nextIndex, 0, step);
+
+      return { ...current, steps };
+    });
+  }
+
+  function handleRemoveRunbookStep(index) {
+    setActionError("");
+    setRunbookDraft((current) => {
+      if (current.steps.length <= 1) {
+        return current;
+      }
+
+      return {
+        ...current,
+        steps: current.steps.filter((_, stepIndex) => stepIndex !== index),
+      };
+    });
+  }
+
+  function handleSaveRunbook(event) {
+    event.preventDefault();
+    const parsed = saveRunbookSchema.safeParse({
+      ...runbookDraft,
+      id: selectedRunbookId,
+      steps: normalizeRunbookSteps(runbookDraft.steps),
+    });
+
+    if (!parsed.success) {
+      setActionError(parsed.error.issues[0]?.message ?? "Runbook is missing required fields.");
+      return;
+    }
+
+    const savedRunbook = {
+      ...parsed.data,
+      id: parsed.data.id ?? makeLocalRunbookId(parsed.data.title, runbooksData),
+      tags: [],
+    };
+
+    if (isDatabaseMode) {
+      runServerAction(
+        () =>
+          saveRunbookAction({
+            ...parsed.data,
+            id: selectedRunbookId,
+          }),
+        {
+          onSuccess: (result) => setSelectedRunbookId(result.runbookId),
+        },
+      );
+      return;
+    }
+
+    setRunbooksState((current) => upsertRunbook(current, savedRunbook));
+    setSelectedRunbookId(savedRunbook.id);
+    setActionError("");
+  }
+
+  function handleDeleteRunbook() {
+    if (!selectedRunbookId) {
+      return;
+    }
+
+    if (isDatabaseMode) {
+      runServerAction(() => deleteRunbookAction({ runbookId: selectedRunbookId }), {
+        onSuccess: () => setSelectedRunbookId(null),
+      });
+      return;
+    }
+
+    const nextRunbooks = runbooksData.filter((runbook) => runbook.id !== selectedRunbookId);
+    setRunbooksState(nextRunbooks);
+    setSelectedRunbookId(nextRunbooks[0]?.id ?? null);
+    setActionError("");
   }
 
   function handleLaunchRunbook(runbook) {
@@ -475,7 +642,23 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
         )}
 
         {activePanel === "runbooks" && (
-          <RunbookLibrary runbooks={runbooksData} services={servicesData} pending={isBusy} onLaunch={handleLaunchRunbook} />
+          <RunbookLibrary
+            draft={runbookDraft}
+            pending={isBusy}
+            runbooks={runbooksData}
+            selectedRunbookId={selectedRunbookId}
+            services={servicesData}
+            onAddStep={handleAddRunbookStep}
+            onDelete={handleDeleteRunbook}
+            onDraftField={handleRunbookField}
+            onLaunch={handleLaunchRunbook}
+            onMoveStep={handleMoveRunbookStep}
+            onNew={handleNewRunbook}
+            onRemoveStep={handleRemoveRunbookStep}
+            onSave={handleSaveRunbook}
+            onSelect={handleSelectRunbook}
+            onStepField={handleRunbookStep}
+          />
         )}
         {activePanel === "services" && <ServiceBoard services={serviceHealth} />}
         {activePanel === "reports" && <Reports incidents={incidents} />}
@@ -743,28 +926,189 @@ function ServiceHealth({ services: serviceHealth }) {
   );
 }
 
-function RunbookLibrary({ runbooks, services, pending, onLaunch }) {
+function RunbookLibrary({
+  draft,
+  pending,
+  runbooks,
+  selectedRunbookId,
+  services,
+  onAddStep,
+  onDelete,
+  onDraftField,
+  onLaunch,
+  onMoveStep,
+  onNew,
+  onRemoveStep,
+  onSave,
+  onSelect,
+  onStepField,
+}) {
   return (
-    <section className="library-grid" aria-label="Runbook library">
-      {runbooks.map((runbook) => (
-        <article className="panel library-card" key={runbook.id}>
-          <div className="library-card-header">
-            <div>
-              <p className="eyebrow">{findService(services, runbook.serviceId)?.name}</p>
-              <h2>{runbook.title}</h2>
+    <section className="runbook-workbench" aria-label="Runbook editor">
+      <div className="runbook-catalog" aria-label="Runbook library">
+        <div className="panel catalog-heading">
+          <div>
+            <p className="eyebrow">Templates</p>
+            <h2>Runbooks</h2>
+          </div>
+          <button className="icon-action" type="button" onClick={onNew} aria-label="New runbook" disabled={pending}>
+            <FilePlus2 size={17} aria-hidden="true" />
+          </button>
+        </div>
+
+        {runbooks.map((runbook) => (
+          <article className={selectedRunbookId === runbook.id ? "panel library-card selected" : "panel library-card"} key={runbook.id}>
+            <button className="library-select" type="button" onClick={() => onSelect(runbook.id)}>
+              <span className="eyebrow">{findService(services, runbook.serviceId)?.name}</span>
+              <strong>{runbook.title}</strong>
+              <span>{runbook.summary}</span>
+            </button>
+            <div className="library-meta">
+              <span>{runbook.defaultSeverity}</span>
+              <span>{runbook.estimatedMinutes}m</span>
+              <span>{runbook.steps.length} steps</span>
             </div>
             <button type="button" onClick={() => onLaunch(runbook)} aria-label={`Launch ${runbook.title}`} disabled={pending}>
               <Plus size={17} aria-hidden="true" />
             </button>
+          </article>
+        ))}
+      </div>
+
+      <form className="panel runbook-editor" onSubmit={onSave}>
+        <div className="editor-heading">
+          <div>
+            <p className="eyebrow">Template</p>
+            <h2>{selectedRunbookId ? "Edit runbook" : "New runbook"}</h2>
           </div>
-          <p>{runbook.summary}</p>
-          <div className="library-meta">
-            <span>{runbook.defaultSeverity}</span>
-            <span>{runbook.estimatedMinutes}m</span>
-            <span>{runbook.steps.length} steps</span>
+          <div className="editor-actions">
+            <button className="secondary-action compact" type="button" onClick={onDelete} disabled={pending || !selectedRunbookId}>
+              <Trash2 size={16} aria-hidden="true" />
+              <span>Delete</span>
+            </button>
+            <button className="primary-action compact" type="submit" disabled={pending}>
+              <Save size={16} aria-hidden="true" />
+              <span>Save</span>
+            </button>
           </div>
-        </article>
-      ))}
+        </div>
+
+        <div className="editor-grid">
+          <label className="field-label">
+            Title
+            <input value={draft.title} onChange={(event) => onDraftField("title", event.target.value)} />
+          </label>
+          <label className="field-label">
+            Service
+            <select value={draft.serviceId} onChange={(event) => onDraftField("serviceId", event.target.value)}>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field-label">
+            Severity
+            <select value={draft.defaultSeverity} onChange={(event) => onDraftField("defaultSeverity", event.target.value)}>
+              {["SEV-1", "SEV-2", "SEV-3", "SEV-4"].map((severity) => (
+                <option key={severity} value={severity}>
+                  {severity}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field-label">
+            Estimate
+            <input
+              min="1"
+              max="480"
+              type="number"
+              value={draft.estimatedMinutes}
+              onChange={(event) => onDraftField("estimatedMinutes", event.target.value)}
+            />
+          </label>
+          <label className="field-label editor-summary">
+            Summary
+            <textarea value={draft.summary} onChange={(event) => onDraftField("summary", event.target.value)} rows={3} />
+          </label>
+        </div>
+
+        <div className="editor-section-heading">
+          <div>
+            <p className="eyebrow">Checklist</p>
+            <h3>Steps</h3>
+          </div>
+          <button className="secondary-action compact" type="button" onClick={onAddStep} disabled={pending}>
+            <Plus size={16} aria-hidden="true" />
+            <span>Add step</span>
+          </button>
+        </div>
+
+        <div className="editor-step-list">
+          {draft.steps.map((step, index) => (
+            <article className="editor-step" key={step.id ?? `step-${index}`}>
+              <div className="editor-step-heading">
+                <span>Step {index + 1}</span>
+                <div className="step-icon-actions">
+                  <button type="button" onClick={() => onMoveStep(index, -1)} aria-label={`Move step ${index + 1} up`} disabled={pending || index === 0}>
+                    <ArrowUp size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMoveStep(index, 1)}
+                    aria-label={`Move step ${index + 1} down`}
+                    disabled={pending || index === draft.steps.length - 1}
+                  >
+                    <ArrowDown size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveStep(index)}
+                    aria-label={`Remove step ${index + 1}`}
+                    disabled={pending || draft.steps.length <= 1}
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="editor-step-grid">
+                <label className="field-label">
+                  Title
+                  <input value={step.title} onChange={(event) => onStepField(index, "title", event.target.value)} />
+                </label>
+                <label className="field-label">
+                  Role
+                  <input value={step.role} onChange={(event) => onStepField(index, "role", event.target.value)} />
+                </label>
+                <label className="field-label">
+                  Timebox
+                  <input
+                    min="1"
+                    max="240"
+                    type="number"
+                    value={step.timeboxMinutes ?? ""}
+                    onChange={(event) => onStepField(index, "timeboxMinutes", event.target.value)}
+                  />
+                </label>
+                <label className="field-label step-detail">
+                  Detail
+                  <textarea value={step.detail} onChange={(event) => onStepField(index, "detail", event.target.value)} rows={3} />
+                </label>
+                <label className="check-label">
+                  <input
+                    checked={step.required}
+                    type="checkbox"
+                    onChange={(event) => onStepField(index, "required", event.target.checked)}
+                  />
+                  <span>Required</span>
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+      </form>
     </section>
   );
 }
@@ -872,7 +1216,107 @@ function findMember(teamMembers, id) {
   return teamMembers.find((member) => member.id === id);
 }
 
-function loadStoredIncidents() {
+function cloneRunbook(runbook) {
+  return {
+    ...runbook,
+    steps: runbook.steps.map((step) => ({ ...step })),
+  };
+}
+
+function createBlankRunbook(services) {
+  return {
+    id: null,
+    title: "New incident runbook",
+    summary: "Describe when this runbook should be launched and what it protects.",
+    serviceId: services[0]?.id ?? "",
+    defaultSeverity: "SEV-3",
+    estimatedMinutes: 30,
+    tags: [],
+    steps: [
+      {
+        id: "draft-step-1",
+        title: "Confirm customer impact",
+        detail: "Check service health, error rates, and user-facing symptoms.",
+        role: "Incident commander",
+        required: true,
+        timeboxMinutes: 5,
+      },
+    ],
+  };
+}
+
+function normalizeRunbookSteps(steps) {
+  const usedIds = new Set();
+
+  return steps.map((step, index) => {
+    const baseId = slugify(step.title) || `step-${index + 1}`;
+    let id = step.id || baseId;
+
+    if (usedIds.has(id)) {
+      id = baseId;
+    }
+
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    usedIds.add(id);
+
+    return {
+      ...step,
+      id,
+      title: step.title.trim(),
+      detail: step.detail.trim(),
+      role: step.role.trim(),
+      required: Boolean(step.required),
+    };
+  });
+}
+
+function nextDraftStepId(steps) {
+  let index = steps.length + 1;
+  let id = `draft-step-${index}`;
+
+  while (steps.some((step) => step.id === id)) {
+    index += 1;
+    id = `draft-step-${index}`;
+  }
+
+  return id;
+}
+
+function makeLocalRunbookId(title, runbooks) {
+  const baseId = slugify(title) || "custom-runbook";
+  let id = baseId;
+  let suffix = 2;
+
+  while (runbooks.some((runbook) => runbook.id === id)) {
+    id = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return id;
+}
+
+function upsertRunbook(runbooks, runbook) {
+  if (runbooks.some((current) => current.id === runbook.id)) {
+    return runbooks.map((current) => (current.id === runbook.id ? runbook : current));
+  }
+
+  return [runbook, ...runbooks];
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function loadStoredDashboard() {
   if (typeof window === "undefined") {
     return null;
   }
@@ -885,7 +1329,10 @@ function loadStoredIncidents() {
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed.incidents) ? parsed.incidents : null;
+    return {
+      incidents: Array.isArray(parsed.incidents) ? parsed.incidents : null,
+      runbooks: Array.isArray(parsed.runbooks) ? parsed.runbooks : null,
+    };
   } catch {
     return null;
   }

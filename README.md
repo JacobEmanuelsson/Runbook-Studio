@@ -6,8 +6,9 @@ Runbook Studio is a fullstack incident runbook workspace for operational teams. 
 
 - Operations dashboard with active incidents, service health, and runbook coverage.
 - Incident workspace with severity, commander, timeline, notes, and assigned checklist steps.
-- Reusable runbook library that can launch new incidents.
+- Reusable runbook library and editor for template details, services, severity, estimates, and ordered checklist steps.
 - Authenticated Prisma reads and server actions for launching incidents, checklist updates, assignments, notes, and resolution.
+- Authenticated server actions for saving and deleting runbook templates.
 - Local browser persistence for demo workflows when no database session is active.
 - Better Auth email/password route and sign-in/sign-up screen.
 - Prisma/PostgreSQL schema for organizations, membership, services, runbooks, incidents, auth sessions, and audit data.
@@ -59,10 +60,10 @@ npm run db:migrate
 npm run seed
 ```
 
-Without a signed-in database session, the app falls back to the local demo dashboard. After sign-in, Runbook Studio creates a workspace for the user, copies the starter services/runbooks, and saves incident workflows through Prisma-backed server actions.
+Without a signed-in database session, the app falls back to the local demo dashboard. After sign-in, Runbook Studio creates a workspace for the user, copies the starter services/runbooks, and saves incident and runbook workflows through Prisma-backed server actions.
 
 ## Product Direction
 
-The next backend phase should add collaboration depth: inviting team members, editing runbook templates, and recording richer post-incident summaries. After that, background reminders and escalation rules can move into a Redis/BullMQ worker.
+The next backend phase should add collaboration depth: inviting team members, role-aware permissions, and richer post-incident summaries. After that, background reminders and escalation rules can move into a Redis/BullMQ worker.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md).
