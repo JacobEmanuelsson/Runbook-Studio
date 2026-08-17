@@ -8,7 +8,12 @@ const vercelAuthHost =
   process.env.VERCEL_ENV === "production"
     ? (process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL)
     : process.env.VERCEL_URL;
-const authBaseURL = process.env.BETTER_AUTH_URL ?? (vercelAuthHost ? `https://${vercelAuthHost}` : "http://localhost:3000");
+const vercelAuthBaseURL = {
+  allowedHosts: ["*.vercel.app"],
+  protocol: "https",
+  ...(vercelAuthHost ? { fallback: `https://${vercelAuthHost}` } : {}),
+};
+const authBaseURL = process.env.BETTER_AUTH_URL ?? (process.env.VERCEL ? vercelAuthBaseURL : "http://localhost:3000");
 
 if (process.env.NODE_ENV === "production" && !isProductionBuild && !process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET must be configured in production.");

@@ -37,7 +37,7 @@ try {
   const page = await browser.newPage();
 
   await page.goto(`${baseUrl}/sign-in`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Create a new workspace account" }).click();
+  await openSignUpForm(page);
   await page.getByLabel("Name").fill(smokeUser.name);
   await page.getByLabel("Email").fill(smokeUser.email);
   await page.getByLabel("Password").fill(smokeUser.password);
@@ -146,6 +146,27 @@ async function assertServerReady() {
   if (!response.ok) {
     throw new Error(`Expected ${baseUrl} to be ready, got HTTP ${response.status}.`);
   }
+}
+
+async function openSignUpForm(page) {
+  const createAccountToggle = page.getByRole("button", { name: "Create a new workspace account" });
+  const nameField = page.getByLabel("Name");
+
+  await createAccountToggle.waitFor({ state: "visible", timeout: actionTimeout });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await createAccountToggle.click();
+
+    try {
+      await nameField.waitFor({ state: "visible", timeout: 5_000 });
+      return;
+    } catch {
+      // Static production pages can show the button before hydration wires up the click handler.
+    }
+  }
+
+  await nameField.waitFor({ state: "visible", timeout: actionTimeout });
 }
 
 async function cleanupSmokeUser() {
