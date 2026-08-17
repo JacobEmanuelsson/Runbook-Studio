@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { deleteRunbookSchema, saveRunbookSchema } from "@/domain/runbooks/schema";
-import { getCurrentUser } from "@/server/auth/require-session";
-import { getMembershipForUser, toDbSeverity } from "@/server/dashboard/dashboard-service";
+import { requireWorkspace, ROLE_GROUPS } from "@/server/auth/workspace";
+import { toDbSeverity } from "@/server/dashboard/dashboard-service";
 import { prisma } from "@/server/db/prisma";
 
 export async function saveRunbookAction(input) {
@@ -13,7 +13,10 @@ export async function saveRunbookAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.owner,
+    action: "edit runbooks",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -96,7 +99,10 @@ export async function deleteRunbookAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.owner,
+    action: "delete runbooks",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -119,22 +125,6 @@ export async function deleteRunbookAction(input) {
   } catch (error) {
     return actionFailure(error, "Could not delete runbook.");
   }
-}
-
-async function requireWorkspace() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    return { ok: false, error: "Sign in to save runbook changes." };
-  }
-
-  const membership = await getMembershipForUser(user.id);
-
-  if (!membership) {
-    return { ok: false, error: "No workspace found for this user." };
-  }
-
-  return { ok: true, user, membership };
 }
 
 function runbookData(input) {

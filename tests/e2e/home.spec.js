@@ -13,4 +13,16 @@ test("loads the incident command dashboard", async ({ page }) => {
   await expect(page.getByRole("button", { name: "New runbook" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Launch Checkout latency above SLO/i })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Services" }).click();
+  await expect(page.getByRole("heading", { name: "Edit service" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New service" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Team" }).click();
+  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Invite" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Reports" }).click();
+  await expect(page.getByRole("heading", { name: "36m" })).toBeVisible();
+  await expect(page.getByText("Noisy services")).toBeVisible();
 });

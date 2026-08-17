@@ -23,24 +23,31 @@
 
 ## Phase 4: Collaboration And Post-Incident Work
 
-- Invite teammates into an organization.
-- Add role-aware permissions for responders, commanders, and viewers.
-- Capture post-incident summaries and follow-up actions.
+- Invite teammates into an organization. Done.
+- Add role-aware permissions for responders, commanders, and viewers. Done.
+- Capture post-incident summaries and follow-up actions. Done.
+- Manage services in the operational catalog. Done.
 
-## Phase 5: Operational Automation
+## Phase 5: MVP Hardening
+
+- Deploy the app with production environment variables.
+- Run `SMOKE_BASE_URL="https://your-production-url" npm run smoke:db` after deploy.
+- Add a product demo walkthrough with screenshots.
+
+## Phase 6: Operational Automation
 
 - Add Redis and BullMQ.
 - Schedule stale-incident reminders.
 - Add escalation rules by severity and service tier.
 - Record all worker actions as timeline events.
 
-## Phase 6: Integrations
+## Phase 7: Integrations
 
 - Add a signed webhook endpoint for GitHub incidents.
 - Add Slack or email notifications.
 - Add status-page style public incident summaries.
 
-## Phase 7: Reporting
+## Phase 8: Reporting
 
 - Add MTTR trends.
 - Track runbook completion rates.

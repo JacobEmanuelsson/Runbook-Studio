@@ -14,6 +14,7 @@ model Organization {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   memberships Membership[]
+  invitations Invitation[]
   services    Service[]
   runbooks    Runbook[]
   incidents   Incident[]
@@ -31,6 +32,7 @@ model User {
   assigned    IncidentStep[] @relation("AssignedIncidentSteps")
   commanded   Incident[]   @relation("IncidentCommander")
   notes       IncidentNote[]
+  createdInvitations Invitation[] @relation("CreatedInvitations")
   sessions    Session[]
   accounts    Account[]
 }
@@ -41,10 +43,27 @@ model Membership {
   userId         String
   role           MemberRole   @default(RESPONDER)
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  role           MemberRole   @default(RESPONDER)
+  token          String       @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  createdById    String?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User?        @relation("CreatedInvitations", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, email])
 }
 
 model Service {
@@ -55,6 +74,8 @@ model Service {
   tier           ServiceTier  @default(TIER_2)
   status         ServiceStatus @default(HEALTHY)
   owner          String
+  sloTarget      String       @default("99.90%")
+  lastDeployAt   DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -104,6 +125,10 @@ model Incident {
   startedAt      DateTime         @default(now())
   resolvedAt     DateTime?
   summary        String?
+  impactSummary  String?
+  rootCause      String?
+  resolutionSummary String?
+  followUpActions String?
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   service        Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   runbook        Runbook?         @relation(fields: [runbookId], references: [id], onDelete: SetNull)

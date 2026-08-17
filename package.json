@@ -20,7 +20,7 @@
     "smoke:db": "node scripts/smoke-db.mjs",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
-    "db:migrate": "prisma migrate dev --name init",
+    "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "seed": "node scripts/seed.mjs"
   },

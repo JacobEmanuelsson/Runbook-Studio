@@ -11,6 +11,9 @@ const smokeUser = {
   password: `Smoke-${timestamp}-Pass123!`,
 };
 const smokeRunbookTitle = `Smoke checkout ${timestamp}`;
+const smokeServiceName = `Smoke Service ${timestamp}`;
+const smokeInviteEmail = `invite-${timestamp}@example.com`;
+const smokeReportSummary = `Smoke report ${timestamp}`;
 const authTimeout = 60_000;
 const actionTimeout = 30_000;
 let launchedIncidentTitle = "";
@@ -61,13 +64,43 @@ try {
   await page.getByText(smokeRunbookTitle).first().waitFor({ state: "visible", timeout: actionTimeout });
   result.checks.push("edited and saved runbook through server action");
 
+  await page.getByRole("button", { name: "Services" }).click();
+  await page.getByRole("button", { name: "New service" }).click();
+  await page.getByLabel("Name").fill(smokeServiceName);
+  await page.getByLabel("Owner").fill("Smoke Operations");
+  await page.getByLabel("SLO").fill("99.91%");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(smokeServiceName).first().waitFor({ state: "visible", timeout: actionTimeout });
+  result.checks.push("created service through server action");
+
+  await page.getByRole("button", { name: "Command" }).click();
+  await page.locator(".report-form").getByLabel("Summary").fill(smokeReportSummary);
+  await page.locator(".report-form").getByLabel("Impact").fill("Synthetic smoke test impact summary.");
+  await page.locator(".report-form").getByLabel("Root cause").fill("Synthetic smoke test root cause.");
+  await page.locator(".report-form").getByLabel("Resolution").fill("Synthetic smoke test resolution.");
+  await page.locator(".report-form").getByLabel("Follow-ups").fill("Synthetic smoke test follow-up.");
+  await page.getByRole("button", { name: "Save report" }).click();
+  await page.getByText("Post-incident report updated.").waitFor({ state: "visible", timeout: actionTimeout });
+  result.checks.push("saved post-incident report through server action");
+
+  await page.getByRole("button", { name: "Team" }).click();
+  await page.getByLabel("Email").fill(smokeInviteEmail);
+  await page.getByRole("button", { name: "Invite" }).click();
+  await page.getByText(smokeInviteEmail).waitFor({ state: "visible", timeout: actionTimeout });
+  result.checks.push("created team invitation through server action");
+
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByText("Saved workspace").waitFor({ state: "visible", timeout: authTimeout });
+  await page.getByRole("button", { name: "Services" }).click();
+  await page.getByText(smokeServiceName).first().waitFor({ state: "visible", timeout: actionTimeout });
+  await page.getByRole("button", { name: "Team" }).click();
+  await page.getByText(smokeInviteEmail).waitFor({ state: "visible", timeout: actionTimeout });
   await page.getByRole("button", { name: "Runbooks" }).click();
   await page.getByText(smokeRunbookTitle).first().waitFor({ state: "visible", timeout: actionTimeout });
   await page.getByRole("button", { name: "Command" }).click();
   await page.getByRole("heading", { name: launchedIncidentTitle }).waitFor({ state: "visible", timeout: actionTimeout });
-  result.checks.push("refresh preserved incident and runbook edit");
+  await page.getByText(smokeReportSummary).waitFor({ state: "visible", timeout: actionTimeout });
+  result.checks.push("refresh preserved incident, report, service, invite, and runbook edit");
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByRole("link", { name: "Sign in" }).waitFor({ state: "visible", timeout: 30_000 });
@@ -77,6 +110,11 @@ try {
   await page.getByRole("button", { name: /^Sign in$/ }).click();
   await page.getByText("Saved workspace").waitFor({ state: "visible", timeout: authTimeout });
   await page.getByRole("heading", { name: launchedIncidentTitle }).waitFor({ state: "visible", timeout: actionTimeout });
+  await page.getByText(smokeReportSummary).waitFor({ state: "visible", timeout: actionTimeout });
+  await page.getByRole("button", { name: "Services" }).click();
+  await page.getByText(smokeServiceName).first().waitFor({ state: "visible", timeout: actionTimeout });
+  await page.getByRole("button", { name: "Team" }).click();
+  await page.getByText(smokeInviteEmail).waitFor({ state: "visible", timeout: actionTimeout });
   await page.getByRole("button", { name: "Runbooks" }).click();
   await page.getByText(smokeRunbookTitle).first().waitFor({ state: "visible", timeout: actionTimeout });
   result.checks.push("sign out/in preserved saved data");

@@ -32,3 +32,14 @@ export const incidentNoteSchema = z.object({
 export const resolveIncidentSchema = z.object({
   incidentId: z.string().trim().min(1),
 });
+
+const reportTextSchema = z.string().trim().max(2_000);
+
+export const incidentReportSchema = z.object({
+  incidentId: z.string().trim().min(1),
+  summary: reportTextSchema,
+  impactSummary: reportTextSchema,
+  rootCause: reportTextSchema,
+  resolutionSummary: reportTextSchema,
+  followUpActions: reportTextSchema,
+});

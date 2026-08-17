@@ -7,6 +7,7 @@ import {
   createIncidentFromRunbook,
   resolveIncident,
   setStepStatus,
+  updateIncidentReport,
 } from "../src/lib/runbook-workflow.js";
 
 test("creates an incident from a runbook with pending steps and an opening event", () => {
@@ -70,6 +71,31 @@ test("resolves when all required steps are done", () => {
   assert.equal(result.incident.resolvedAt, "2026-08-17T08:20:00.000Z");
 });
 
+test("updates incident report fields and records a timeline event", () => {
+  const incident = createIncidentFromRunbook({
+    id: "inc-test",
+    runbook: runbooks[1],
+    commanderId: "maya",
+  });
+
+  const updated = updateIncidentReport(
+    incident,
+    {
+      summary: "API error rate recovered after rollback.",
+      impactSummary: "Some API clients saw failed token refreshes.",
+      rootCause: "Validation config shipped before metadata rollout.",
+      resolutionSummary: "Rolled back the config and replayed failures.",
+      followUpActions: "Add tenant canary validation.",
+    },
+    "maya",
+    "2026-08-17T08:35:00.000Z",
+  );
+
+  assert.equal(updated.summary, "API error rate recovered after rollback.");
+  assert.equal(updated.rootCause, "Validation config shipped before metadata rollout.");
+  assert.equal(updated.timeline[0].type, "report_updated");
+});
+
 test("calculates progress, coverage, and MTTR", () => {
   const incidents = [
     {
@@ -92,4 +118,3 @@ test("calculates progress, coverage, and MTTR", () => {
   assert.equal(getRunbookCoverage(incidents), 50);
   assert.equal(getAverageResolutionMinutes(incidents), 30);
 });
-

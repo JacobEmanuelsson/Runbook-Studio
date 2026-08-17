@@ -38,6 +38,10 @@ export function createIncidentFromRunbook({
     startedAt,
     resolvedAt: null,
     summary: "",
+    impactSummary: "",
+    rootCause: "",
+    resolutionSummary: "",
+    followUpActions: "",
     steps: runbook.steps.map((step) => ({
       id: `${incidentId}-${step.id}`,
       sourceStepId: step.id,
@@ -192,6 +196,26 @@ export function resolveIncident(incident, actorId, createdAt) {
   };
 }
 
+export function updateIncidentReport(incident, report, actorId, createdAt) {
+  return {
+    ...incident,
+    summary: report.summary.trim(),
+    impactSummary: report.impactSummary.trim(),
+    rootCause: report.rootCause.trim(),
+    resolutionSummary: report.resolutionSummary.trim(),
+    followUpActions: report.followUpActions.trim(),
+    timeline: [
+      createTimelineEvent({
+        type: "report_updated",
+        message: "Post-incident report updated.",
+        actorId,
+        createdAt,
+      }),
+      ...incident.timeline,
+    ],
+  };
+}
+
 function stepEventType(status) {
   if (status === "done") {
     return "step_done";
@@ -211,4 +235,3 @@ function makeId(prefix) {
 
   return `${prefix}-${Math.random().toString(16).slice(2, 10)}`;
 }
-

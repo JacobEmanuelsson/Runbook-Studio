@@ -196,6 +196,10 @@ export const initialIncidents = [
     startedAt: "2026-08-17T07:18:00.000Z",
     resolvedAt: null,
     summary: "",
+    impactSummary: "",
+    rootCause: "",
+    resolutionSummary: "",
+    followUpActions: "",
     steps: [
       {
         id: "inc-1042-latency-confirm",
@@ -285,6 +289,10 @@ export const initialIncidents = [
     startedAt: "2026-08-17T05:42:00.000Z",
     resolvedAt: null,
     summary: "",
+    impactSummary: "Retry latency was elevated for background automation jobs, but customer-facing requests stayed healthy.",
+    rootCause: "A worker pool deploy increased lock contention on retry-heavy job batches.",
+    resolutionSummary: "Reduced concurrency, drained the stuck batch, and left queue depth under watch.",
+    followUpActions: "Add lock-wait alerts and test high-retry batches before future worker deploys.",
     steps: [
       {
         id: "inc-1041-queue-depth",
@@ -349,6 +357,10 @@ export const initialIncidents = [
     startedAt: "2026-08-16T21:05:00.000Z",
     resolvedAt: "2026-08-16T21:41:00.000Z",
     summary: "Rolled back a config change that caused validation failures on token refresh.",
+    impactSummary: "Some API clients saw elevated 5xx responses on token refresh for 36 minutes.",
+    rootCause: "A config rollout tightened validation before all tenants had the matching metadata.",
+    resolutionSummary: "Rolled back the config change and replayed failed refresh attempts.",
+    followUpActions: "Gate config validation behind a staged tenant rollout and add canary coverage for token refresh.",
     steps: [],
     timeline: [
       {
@@ -369,4 +381,3 @@ export const initialIncidents = [
     notes: [],
   },
 ];
-

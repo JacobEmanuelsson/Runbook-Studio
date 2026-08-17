@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import {
   assignStepSchema,
+  incidentReportSchema,
   incidentNoteSchema,
   launchIncidentSchema,
   resolveIncidentSchema,
   updateStepSchema,
 } from "@/domain/incidents/schema";
-import { getCurrentUser } from "@/server/auth/require-session";
-import { getMembershipForUser, toDbSeverity, toDbStepStatus } from "@/server/dashboard/dashboard-service";
+import { requireWorkspace, ROLE_GROUPS } from "@/server/auth/workspace";
+import { toDbSeverity, toDbStepStatus } from "@/server/dashboard/dashboard-service";
 import { prisma } from "@/server/db/prisma";
 
 const stepStatusLabels = {
@@ -26,7 +27,10 @@ export async function launchIncidentAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentResponder,
+    action: "launch incidents",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -116,7 +120,10 @@ export async function updateIncidentStepAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentResponder,
+    action: "update incidents",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -174,7 +181,10 @@ export async function assignIncidentStepAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentResponder,
+    action: "assign incident steps",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -220,7 +230,10 @@ export async function addIncidentNoteAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentResponder,
+    action: "add incident notes",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -272,7 +285,10 @@ export async function resolveIncidentAction(input) {
     return parsed;
   }
 
-  const workspace = await requireWorkspace();
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentCommander,
+    action: "resolve incidents",
+  });
 
   if (!workspace.ok) {
     return workspace;
@@ -331,20 +347,62 @@ export async function resolveIncidentAction(input) {
   }
 }
 
-async function requireWorkspace() {
-  const user = await getCurrentUser();
+export async function saveIncidentReportAction(input) {
+  const parsed = parseInput(incidentReportSchema, input);
 
-  if (!user) {
-    return { ok: false, error: "Sign in to save runbook changes." };
+  if (!parsed.ok) {
+    return parsed;
   }
 
-  const membership = await getMembershipForUser(user.id);
+  const workspace = await requireWorkspace({
+    allowedRoles: ROLE_GROUPS.incidentCommander,
+    action: "edit incident reports",
+  });
 
-  if (!membership) {
-    return { ok: false, error: "No workspace found for this user." };
+  if (!workspace.ok) {
+    return workspace;
   }
 
-  return { ok: true, user, membership };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const incident = await tx.incident.findFirst({
+        where: {
+          id: parsed.data.incidentId,
+          organizationId: workspace.membership.organizationId,
+        },
+        select: { id: true },
+      });
+
+      if (!incident) {
+        throw new ActionFailure("Incident is not available in this workspace.");
+      }
+
+      await tx.incident.update({
+        where: { id: incident.id },
+        data: {
+          summary: emptyToNull(parsed.data.summary),
+          impactSummary: emptyToNull(parsed.data.impactSummary),
+          rootCause: emptyToNull(parsed.data.rootCause),
+          resolutionSummary: emptyToNull(parsed.data.resolutionSummary),
+          followUpActions: emptyToNull(parsed.data.followUpActions),
+        },
+      });
+
+      await tx.timelineEvent.create({
+        data: {
+          incidentId: incident.id,
+          type: "report_updated",
+          message: "Post-incident report updated.",
+          actorId: workspace.user.id,
+        },
+      });
+    });
+
+    revalidatePath("/");
+    return { ok: true };
+  } catch (error) {
+    return actionFailure(error, "Could not save incident report.");
+  }
 }
 
 async function getIncidentStep(tx, { incidentId, organizationId, stepId }) {
@@ -410,6 +468,11 @@ function parseInput(schema, input) {
   }
 
   return { ok: true, data: result.data };
+}
+
+function emptyToNull(value) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function actionFailure(error, fallback) {

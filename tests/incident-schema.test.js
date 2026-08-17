@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assignStepSchema, incidentNoteSchema, launchIncidentSchema, updateStepSchema } from "../src/domain/incidents/schema.js";
+import {
+  assignStepSchema,
+  incidentNoteSchema,
+  incidentReportSchema,
+  launchIncidentSchema,
+  updateStepSchema,
+} from "../src/domain/incidents/schema.js";
 
 test("validates launch incident input", () => {
   const result = launchIncidentSchema.safeParse({
@@ -38,6 +44,19 @@ test("validates checklist assignment updates", () => {
     incidentId: "inc-1042",
     stepId: "inc-1042-queue-drain",
     assigneeId: "leo",
+  });
+
+  assert.equal(result.success, true);
+});
+
+test("validates post-incident report payloads", () => {
+  const result = incidentReportSchema.safeParse({
+    incidentId: "inc-1042",
+    summary: "Payment processor latency recovered after queue pressure dropped.",
+    impactSummary: "Checkout latency was elevated for a subset of EU users.",
+    rootCause: "Processor webhook retries saturated a worker pool.",
+    resolutionSummary: "Paused replay jobs and drained payment retries.",
+    followUpActions: "Add queue saturation alerting before the next launch.",
   });
 
   assert.equal(result.success, true);

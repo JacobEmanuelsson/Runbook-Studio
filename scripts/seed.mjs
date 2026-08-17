@@ -67,6 +67,8 @@ async function seed() {
         tier: service.tier.toUpperCase().replace(" ", "_"),
         status: service.status.toUpperCase(),
         owner: service.owner,
+        sloTarget: service.slo,
+        lastDeployAt: service.lastDeploy,
       },
     });
   }
@@ -110,6 +112,10 @@ async function seed() {
         startedAt: incident.startedAt,
         resolvedAt: incident.resolvedAt,
         summary: incident.summary || null,
+        impactSummary: incident.impactSummary || null,
+        rootCause: incident.rootCause || null,
+        resolutionSummary: incident.resolutionSummary || null,
+        followUpActions: incident.followUpActions || null,
         steps: {
           create: incident.steps.map((step, index) => ({
             id: step.id,

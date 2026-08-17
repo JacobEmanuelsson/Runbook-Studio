@@ -10,7 +10,7 @@ export async function getDashboardForUser(userId) {
     include: dashboardInclude(),
   });
 
-  return membership ? mapOrganizationToDashboard(membership.organization) : null;
+  return membership ? mapOrganizationToDashboard(membership.organization, membership) : null;
 }
 
 export async function getOrCreateDashboardForUser(user) {
@@ -18,6 +18,12 @@ export async function getOrCreateDashboardForUser(user) {
 
   if (existing) {
     return existing;
+  }
+
+  const acceptedInvite = await acceptPendingInvitationForUser(user);
+
+  if (acceptedInvite) {
+    return waitForDashboardForUser(user.id);
   }
 
   try {
@@ -41,11 +47,16 @@ export async function getMembershipForUser(userId) {
 
 function dashboardInclude() {
   return {
+    user: true,
     organization: {
       include: {
         memberships: {
           orderBy: { createdAt: "asc" },
           include: { user: true },
+        },
+        invitations: {
+          where: { acceptedAt: null },
+          orderBy: { createdAt: "desc" },
         },
         services: {
           orderBy: [{ tier: "asc" }, { name: "asc" }],
@@ -104,6 +115,8 @@ async function createWorkspaceForUser(user) {
         tier: toDbTier(service.tier),
         status: toDbServiceStatus(service.status),
         owner: service.owner,
+        sloTarget: service.slo,
+        lastDeployAt: service.lastDeploy,
       },
     });
   }
@@ -159,6 +172,56 @@ async function waitForDashboardForUser(userId) {
   return getDashboardForUser(userId);
 }
 
+async function acceptPendingInvitationForUser(user) {
+  const email = user.email?.trim().toLowerCase();
+
+  if (!email) {
+    return false;
+  }
+
+  const invitation = await prisma.invitation.findFirst({
+    where: {
+      email,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      organizationId: true,
+      role: true,
+    },
+  });
+
+  if (!invitation) {
+    return false;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.membership.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: invitation.organizationId,
+          userId: user.id,
+        },
+      },
+      update: {},
+      create: {
+        organizationId: invitation.organizationId,
+        userId: user.id,
+        role: invitation.role,
+      },
+    });
+
+    await tx.invitation.update({
+      where: { id: invitation.id },
+      data: { acceptedAt: new Date() },
+    });
+  });
+
+  return true;
+}
+
 function isUniqueConstraintError(error) {
   return error?.code === "P2002";
 }
@@ -169,17 +232,19 @@ function delay(ms) {
   });
 }
 
-export function mapOrganizationToDashboard(organization) {
+export function mapOrganizationToDashboard(organization, currentMembership = null) {
   return {
     organization: {
       id: organization.id,
       name: organization.name,
       slug: organization.slug,
     },
+    currentMembership: currentMembership ? mapMembership(currentMembership) : null,
     services: organization.services.map(mapService),
     runbooks: organization.runbooks.map(mapRunbook),
     incidents: organization.incidents.map(mapIncident),
     teamMembers: organization.memberships.map(mapMembership),
+    teamInvitations: organization.invitations?.map(mapInvitation) ?? [],
   };
 }
 
@@ -187,8 +252,22 @@ function mapMembership(membership) {
   return {
     id: membership.user.id,
     name: membership.user.name,
-    role: membership.role.toLowerCase().replaceAll("_", " "),
+    email: membership.user.email,
+    role: toUiRole(membership.role),
+    roleValue: membership.role,
     initials: getInitials(membership.user.name),
+  };
+}
+
+function mapInvitation(invitation) {
+  return {
+    id: invitation.id,
+    email: invitation.email,
+    role: toUiRole(invitation.role),
+    roleValue: invitation.role,
+    token: invitation.token,
+    createdAt: invitation.createdAt.toISOString(),
+    expiresAt: invitation.expiresAt.toISOString(),
   };
 }
 
@@ -201,9 +280,9 @@ function mapService(service) {
     owner: service.owner,
     tier: toUiTier(service.tier),
     status: toUiStatus(service.status),
-    slo: meta?.slo ?? "99.90%",
+    slo: service.sloTarget ?? meta?.slo ?? "99.90%",
     openIncidents: 0,
-    lastDeploy: meta?.lastDeploy ?? null,
+    lastDeploy: service.lastDeployAt?.toISOString() ?? meta?.lastDeploy ?? null,
   };
 }
 
@@ -239,6 +318,10 @@ function mapIncident(incident) {
     startedAt: incident.startedAt.toISOString(),
     resolvedAt: incident.resolvedAt?.toISOString() ?? null,
     summary: incident.summary ?? "",
+    impactSummary: incident.impactSummary ?? "",
+    rootCause: incident.rootCause ?? "",
+    resolutionSummary: incident.resolutionSummary ?? "",
+    followUpActions: incident.followUpActions ?? "",
     steps: incident.steps.map((step) => ({
       id: step.id,
       title: step.title,
@@ -274,11 +357,11 @@ export function toDbStepStatus(value) {
   return value.toUpperCase();
 }
 
-function toDbTier(value) {
+export function toDbTier(value) {
   return value.toUpperCase().replace(" ", "_");
 }
 
-function toDbServiceStatus(value) {
+export function toDbServiceStatus(value) {
   return value.toUpperCase();
 }
 
@@ -292,6 +375,10 @@ function toUiStatus(value) {
 
 function toUiTier(value) {
   return value.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function toUiRole(value) {
+  return value.toLowerCase().replaceAll("_", " ");
 }
 
 function getInitials(name) {

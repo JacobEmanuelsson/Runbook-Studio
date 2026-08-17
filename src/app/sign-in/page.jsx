@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, KeyRound, Radio } from "lucide-react";
@@ -18,6 +18,22 @@ export default function SignInPage() {
   const [formState, setFormState] = useState(initialForm);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [hasInvite, setHasInvite] = useState(false);
+
+  useEffect(() => {
+    const nextHasInvite = new URLSearchParams(window.location.search).has("invite");
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setHasInvite(nextHasInvite);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -71,7 +87,11 @@ export default function SignInPage() {
           </div>
           <p className="eyebrow">Workspace access</p>
           <h1>{mode === "sign-in" ? "Sign in" : "Create account"}</h1>
-          <p>Use email and password authentication for the database-backed incident workspace.</p>
+          <p>
+            {hasInvite
+              ? "Create or sign in with the invited email to join the shared incident workspace."
+              : "Use email and password authentication for the database-backed incident workspace."}
+          </p>
         </div>
 
         <form className="auth-form" onSubmit={submit}>
