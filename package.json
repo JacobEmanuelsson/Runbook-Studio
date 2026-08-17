@@ -17,6 +17,7 @@
     "lint": "eslint src tests scripts",
     "test": "node --test",
     "test:e2e": "node scripts/e2e.mjs",
+    "smoke:db": "node scripts/smoke-db.mjs",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev --name init",

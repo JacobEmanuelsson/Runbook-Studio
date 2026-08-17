@@ -20,8 +20,15 @@ export async function getOrCreateDashboardForUser(user) {
     return existing;
   }
 
-  await createWorkspaceForUser(user);
-  return getDashboardForUser(user.id);
+  try {
+    await createWorkspaceForUser(user);
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+  }
+
+  return waitForDashboardForUser(user.id);
 }
 
 export async function getMembershipForUser(userId) {
@@ -75,19 +82,11 @@ function dashboardInclude() {
 }
 
 async function createWorkspaceForUser(user) {
-  const suffix = user.id.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "workspace";
+  const suffix = user.id.toLowerCase().replace(/[^a-z0-9]/g, "") || "workspace";
   const organization = await prisma.organization.create({
     data: {
       name: `${user.name || "Personal"} Operations`,
       slug: `workspace-${suffix}`,
-    },
-  });
-
-  await prisma.membership.create({
-    data: {
-      organizationId: organization.id,
-      userId: user.id,
-      role: "OWNER",
     },
   });
 
@@ -135,7 +134,39 @@ async function createWorkspaceForUser(user) {
     });
   }
 
+  await prisma.membership.create({
+    data: {
+      organizationId: organization.id,
+      userId: user.id,
+      role: "OWNER",
+    },
+  });
+
   return organization;
+}
+
+async function waitForDashboardForUser(userId) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const dashboard = await getDashboardForUser(userId);
+
+    if (dashboard) {
+      return dashboard;
+    }
+
+    await delay(100 * (attempt + 1));
+  }
+
+  return getDashboardForUser(userId);
+}
+
+function isUniqueConstraintError(error) {
+  return error?.code === "P2002";
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export function mapOrganizationToDashboard(organization) {

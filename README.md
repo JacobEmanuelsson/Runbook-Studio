@@ -46,7 +46,10 @@ npm run lint
 npm test
 npm run build
 npm run test:e2e
+npm run smoke:db
 ```
+
+`npm run smoke:db` expects the dev server to be running and uses the configured database to verify sign-up, persisted incident launch, persisted runbook edits, sign-out/sign-in, and cleanup.
 
 ## Database Setup
 
