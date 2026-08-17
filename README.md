@@ -7,7 +7,8 @@ Runbook Studio is a fullstack incident runbook workspace for operational teams. 
 - Operations dashboard with active incidents, service health, and runbook coverage.
 - Incident workspace with severity, commander, timeline, notes, and assigned checklist steps.
 - Reusable runbook library that can launch new incidents.
-- Local browser persistence for demo workflows.
+- Authenticated Prisma reads and server actions for launching incidents, checklist updates, assignments, notes, and resolution.
+- Local browser persistence for demo workflows when no database session is active.
 - Better Auth email/password route and sign-in/sign-up screen.
 - Prisma/PostgreSQL schema for organizations, membership, services, runbooks, incidents, auth sessions, and audit data.
 - Database seed script for the same demo workspace shown in the UI.
@@ -58,10 +59,10 @@ npm run db:migrate
 npm run seed
 ```
 
-The current dashboard still uses seeded browser state so it remains easy to inspect without a database. The backend is now ready for the next pass: replacing local state with authenticated Prisma reads and server actions.
+Without a signed-in database session, the app falls back to the local demo dashboard. After sign-in, Runbook Studio creates a workspace for the user, copies the starter services/runbooks, and saves incident workflows through Prisma-backed server actions.
 
 ## Product Direction
 
-The next backend phase should replace browser-local incident mutations with authenticated server actions for incidents, runbooks, checklist steps, notes, and timeline events. After that, background reminders and escalation rules can move into a Redis/BullMQ worker.
+The next backend phase should add collaboration depth: inviting team members, editing runbook templates, and recording richer post-incident summaries. After that, background reminders and escalation rules can move into a Redis/BullMQ worker.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md).

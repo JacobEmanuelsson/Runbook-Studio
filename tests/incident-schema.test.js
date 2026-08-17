@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { incidentNoteSchema, launchIncidentSchema, updateStepSchema } from "../src/domain/incidents/schema.js";
+import { assignStepSchema, incidentNoteSchema, launchIncidentSchema, updateStepSchema } from "../src/domain/incidents/schema.js";
 
 test("validates launch incident input", () => {
   const result = launchIncidentSchema.safeParse({
@@ -33,3 +33,12 @@ test("validates checklist step updates", () => {
   assert.equal(result.success, true);
 });
 
+test("validates checklist assignment updates", () => {
+  const result = assignStepSchema.safeParse({
+    incidentId: "inc-1042",
+    stepId: "inc-1042-queue-drain",
+    assigneeId: "leo",
+  });
+
+  assert.equal(result.success, true);
+});

@@ -12,23 +12,30 @@
 - Add Better Auth. Done.
 - Add Prisma/PostgreSQL schema for organization membership and incident data. Done.
 - Add a database seed script for the demo workspace. Done.
-- Persist services, runbooks, incidents, notes, and timeline events in PostgreSQL-backed pages.
-- Move client mutations into server actions with Zod validation.
+- Persist services, runbooks, incidents, notes, and timeline events in PostgreSQL-backed pages. Done.
+- Move client mutations into server actions with Zod validation. Done.
 
-## Phase 3: Operational Automation
+## Phase 3: Collaboration And Runbook Editing
+
+- Invite teammates into an organization.
+- Add role-aware permissions for responders, commanders, and viewers.
+- Create and edit runbook templates in the app.
+- Capture post-incident summaries and follow-up actions.
+
+## Phase 4: Operational Automation
 
 - Add Redis and BullMQ.
 - Schedule stale-incident reminders.
 - Add escalation rules by severity and service tier.
 - Record all worker actions as timeline events.
 
-## Phase 4: Integrations
+## Phase 5: Integrations
 
 - Add a signed webhook endpoint for GitHub incidents.
 - Add Slack or email notifications.
 - Add status-page style public incident summaries.
 
-## Phase 5: Reporting
+## Phase 6: Reporting
 
 - Add MTTR trends.
 - Track runbook completion rates.

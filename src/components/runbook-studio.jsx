@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -13,6 +14,7 @@ import {
   Gauge,
   ListChecks,
   LogIn,
+  LogOut,
   PauseCircle,
   Play,
   Plus,
@@ -23,6 +25,14 @@ import {
   TimerReset,
   UserRound,
 } from "lucide-react";
+import {
+  addIncidentNoteAction,
+  assignIncidentStepAction,
+  launchIncidentAction,
+  resolveIncidentAction,
+  updateIncidentStepAction,
+} from "@/server/incidents/incident-actions";
+import { authClient } from "@/lib/auth-client";
 import { formatMinutes, formatShortDate } from "@/lib/format";
 import {
   buildServiceHealth,
@@ -32,7 +42,12 @@ import {
   getRunbookCoverage,
   getStepProgress,
 } from "@/lib/incident-metrics";
-import { initialIncidents, runbooks, services, teamMembers } from "@/lib/sample-data";
+import {
+  initialIncidents as demoIncidents,
+  runbooks as demoRunbooks,
+  services as demoServices,
+  teamMembers as demoTeamMembers,
+} from "@/lib/sample-data";
 import {
   addIncidentNote,
   assignStep,
@@ -43,7 +58,14 @@ import {
 } from "@/lib/runbook-workflow";
 
 const STORAGE_KEY = "runbook-studio-state-v1";
-const CURRENT_USER_ID = "maya";
+const DEMO_USER_ID = "maya";
+const demoDashboard = {
+  organization: null,
+  services: demoServices,
+  runbooks: demoRunbooks,
+  incidents: demoIncidents,
+  teamMembers: demoTeamMembers,
+};
 
 const panels = [
   { id: "command", label: "Command", icon: Radio },
@@ -59,40 +81,63 @@ const stepStatuses = [
   { id: "done", label: "Done", icon: Check },
 ];
 
-export function RunbookStudio() {
-  const [incidents, setIncidents] = useState(initialIncidents);
-  const [selectedIncidentId, setSelectedIncidentId] = useState(initialIncidents[0]?.id ?? null);
+export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, loadError = "", mode = "demo" }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [isMutating, setIsMutating] = useState(false);
+  const isDatabaseMode = mode === "database";
+  const isBusy = isPending || isMutating;
+  const servicesData = dashboard.services ?? demoServices;
+  const runbooksData = dashboard.runbooks ?? demoRunbooks;
+  const membersData = dashboard.teamMembers ?? demoTeamMembers;
+  const actorId = currentUser?.id ?? DEMO_USER_ID;
+  const workspaceName = dashboard.organization?.name ?? "Local demo";
+  const [incidents, setIncidents] = useState(dashboard.incidents ?? demoIncidents);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(dashboard.incidents?.[0]?.id ?? demoIncidents[0]?.id ?? null);
   const [activePanel, setActivePanel] = useState("command");
   const [noteDraft, setNoteDraft] = useState("");
   const [resolveError, setResolveError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
-    const storedIncidents = loadStoredIncidents();
+    const nextIncidents = isDatabaseMode ? dashboard.incidents ?? [] : loadStoredIncidents() ?? dashboard.incidents ?? demoIncidents;
+    let cancelled = false;
 
     queueMicrotask(() => {
-      if (storedIncidents) {
-        setIncidents(storedIncidents);
-        setSelectedIncidentId(storedIncidents[0]?.id ?? null);
+      if (cancelled) {
+        return;
       }
 
+      setIncidents(nextIncidents);
+      setSelectedIncidentId((currentId) => {
+        if (currentId && nextIncidents.some((incident) => incident.id === currentId)) {
+          return currentId;
+        }
+
+        return nextIncidents[0]?.id ?? null;
+      });
       setStorageReady(true);
     });
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboard, isDatabaseMode]);
 
   useEffect(() => {
-    if (!storageReady) {
+    if (!storageReady || isDatabaseMode) {
       return;
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ incidents }));
-  }, [incidents, storageReady]);
+  }, [incidents, isDatabaseMode, storageReady]);
 
   const activeIncidents = useMemo(() => getActiveIncidents(incidents), [incidents]);
-  const serviceHealth = useMemo(() => buildServiceHealth(services, incidents), [incidents]);
+  const serviceHealth = useMemo(() => buildServiceHealth(servicesData, incidents), [incidents, servicesData]);
   const selectedIncident = incidents.find((incident) => incident.id === selectedIncidentId) ?? incidents[0] ?? null;
-  const selectedService = selectedIncident ? findService(selectedIncident.serviceId) : null;
-  const selectedCommander = selectedIncident ? findMember(selectedIncident.commanderId) : null;
+  const selectedService = selectedIncident ? findService(servicesData, selectedIncident.serviceId) : null;
+  const selectedCommander = selectedIncident ? findMember(membersData, selectedIncident.commanderId) : null;
   const selectedProgress = selectedIncident ? getStepProgress(selectedIncident) : null;
 
   const metrics = [
@@ -106,7 +151,7 @@ export function RunbookStudio() {
     {
       label: "Services degraded",
       value: serviceHealth.filter((service) => service.status !== "healthy").length,
-      detail: `${services.length} tracked`,
+      detail: `${servicesData.length} tracked`,
       icon: Activity,
       tone: "rose",
     },
@@ -120,7 +165,7 @@ export function RunbookStudio() {
     {
       label: "Runbook coverage",
       value: `${getRunbookCoverage(incidents)}%`,
-      detail: `${runbooks.length} templates`,
+      detail: `${runbooksData.length} templates`,
       icon: ListChecks,
       tone: "indigo",
     },
@@ -128,17 +173,38 @@ export function RunbookStudio() {
 
   function updateIncident(incidentId, updater) {
     setResolveError("");
+    setActionError("");
     setIncidents((current) => current.map((incident) => (incident.id === incidentId ? updater(incident) : incident)));
   }
 
   function handleLaunchRunbook(runbook) {
-    const createdAt = new Date().toISOString();
+    if (!runbook) {
+      return;
+    }
+
+    if (isDatabaseMode) {
+      runServerAction(
+        () =>
+          launchIncidentAction({
+            title: runbook.title,
+            serviceId: runbook.serviceId,
+            runbookId: runbook.id,
+            severity: runbook.defaultSeverity,
+          }),
+        {
+          onSuccess: (result) => {
+            setSelectedIncidentId(result.incidentId);
+            setActivePanel("command");
+          },
+        },
+      );
+      return;
+    }
+
     const incident = createIncidentFromRunbook({
-      id: `inc-${Date.now().toString().slice(-6)}`,
       runbook,
       serviceId: runbook.serviceId,
-      commanderId: CURRENT_USER_ID,
-      createdAt,
+      commanderId: actorId,
     });
 
     setIncidents((current) => [incident, ...current]);
@@ -151,7 +217,18 @@ export function RunbookStudio() {
       return;
     }
 
-    updateIncident(selectedIncident.id, (incident) => setStepStatus(incident, stepId, status, CURRENT_USER_ID));
+    if (isDatabaseMode) {
+      runServerAction(() =>
+        updateIncidentStepAction({
+          incidentId: selectedIncident.id,
+          stepId,
+          status,
+        }),
+      );
+      return;
+    }
+
+    updateIncident(selectedIncident.id, (incident) => setStepStatus(incident, stepId, status, actorId));
   }
 
   function handleAssignee(stepId, assigneeId) {
@@ -159,17 +236,43 @@ export function RunbookStudio() {
       return;
     }
 
-    updateIncident(selectedIncident.id, (incident) => assignStep(incident, stepId, assigneeId, CURRENT_USER_ID));
+    if (isDatabaseMode) {
+      runServerAction(() =>
+        assignIncidentStepAction({
+          incidentId: selectedIncident.id,
+          stepId,
+          assigneeId,
+        }),
+      );
+      return;
+    }
+
+    updateIncident(selectedIncident.id, (incident) => assignStep(incident, stepId, assigneeId, actorId));
   }
 
   function handleAddNote(event) {
     event.preventDefault();
+    const body = noteDraft.trim();
 
-    if (!selectedIncident) {
+    if (!selectedIncident || !body) {
       return;
     }
 
-    updateIncident(selectedIncident.id, (incident) => addIncidentNote(incident, noteDraft, CURRENT_USER_ID));
+    if (isDatabaseMode) {
+      runServerAction(
+        () =>
+          addIncidentNoteAction({
+            incidentId: selectedIncident.id,
+            body,
+          }),
+        {
+          onSuccess: () => setNoteDraft(""),
+        },
+      );
+      return;
+    }
+
+    updateIncident(selectedIncident.id, (incident) => addIncidentNote(incident, body, actorId));
     setNoteDraft("");
   }
 
@@ -178,7 +281,21 @@ export function RunbookStudio() {
       return;
     }
 
-    const result = resolveIncident(selectedIncident, CURRENT_USER_ID);
+    if (isDatabaseMode) {
+      setResolveError("");
+      runServerAction(
+        () =>
+          resolveIncidentAction({
+            incidentId: selectedIncident.id,
+          }),
+        {
+          onError: setResolveError,
+        },
+      );
+      return;
+    }
+
+    const result = resolveIncident(selectedIncident, actorId);
 
     if (!result.ok) {
       setResolveError("Required steps are still open.");
@@ -187,6 +304,54 @@ export function RunbookStudio() {
 
     setIncidents((current) => current.map((incident) => (incident.id === selectedIncident.id ? result.incident : incident)));
     setResolveError("");
+  }
+
+  function handleSignOut() {
+    setActionError("");
+    setIsMutating(true);
+    startTransition(() => {
+      authClient
+        .signOut()
+        .then(() => {
+          router.refresh();
+        })
+        .catch((error) => {
+          console.error(error);
+          setActionError("Could not sign out.");
+        })
+        .finally(() => {
+          setIsMutating(false);
+        });
+    });
+  }
+
+  function runServerAction(action, { onSuccess, onError } = {}) {
+    setActionError("");
+    setResolveError("");
+    setIsMutating(true);
+    startTransition(() => {
+      action()
+        .then((result) => {
+          if (!result?.ok) {
+            const message = result?.error ?? "Action failed.";
+            setActionError(message);
+            onError?.(message);
+            return;
+          }
+
+          onSuccess?.(result);
+          router.refresh();
+        })
+        .catch((error) => {
+          console.error(error);
+          const message = "Action failed.";
+          setActionError(message);
+          onError?.(message);
+        })
+        .finally(() => {
+          setIsMutating(false);
+        });
+    });
   }
 
   return (
@@ -228,20 +393,35 @@ export function RunbookStudio() {
       <main className="main">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Operations</p>
+            <p className="eyebrow">{workspaceName}</p>
             <h1>Incident command</h1>
           </div>
           <div className="topbar-actions">
-            <Link className="secondary-action" href="/sign-in">
-              <LogIn size={18} aria-hidden="true" />
-              <span>Sign in</span>
-            </Link>
-            <button className="primary-action" type="button" onClick={() => handleLaunchRunbook(runbooks[0])}>
+            <span className={isDatabaseMode ? "mode-chip saved" : "mode-chip"}>{isDatabaseMode ? "Saved workspace" : "Demo mode"}</span>
+            {currentUser ? (
+              <button className="secondary-action" type="button" onClick={handleSignOut} disabled={isBusy}>
+                <LogOut size={18} aria-hidden="true" />
+                <span>Sign out</span>
+              </button>
+            ) : (
+              <Link className="secondary-action" href="/sign-in">
+                <LogIn size={18} aria-hidden="true" />
+                <span>Sign in</span>
+              </Link>
+            )}
+            <button
+              className="primary-action"
+              type="button"
+              onClick={() => handleLaunchRunbook(runbooksData[0])}
+              disabled={isBusy || !runbooksData[0]}
+            >
               <Plus size={18} aria-hidden="true" />
               <span>New incident</span>
             </button>
           </div>
         </header>
+
+        {(loadError || actionError) && <p className="app-alert">{actionError || loadError}</p>}
 
         <section className="metric-grid" aria-label="Operational metrics">
           {metrics.map((metric) => {
@@ -266,6 +446,8 @@ export function RunbookStudio() {
             <IncidentQueue
               incidents={incidents}
               selectedIncidentId={selectedIncident?.id}
+              services={servicesData}
+              teamMembers={membersData}
               onSelect={setSelectedIncidentId}
             />
 
@@ -274,6 +456,8 @@ export function RunbookStudio() {
               service={selectedService}
               commander={selectedCommander}
               progress={selectedProgress}
+              teamMembers={membersData}
+              pending={isBusy}
               resolveError={resolveError}
               noteDraft={noteDraft}
               onNoteDraft={setNoteDraft}
@@ -284,13 +468,15 @@ export function RunbookStudio() {
             />
 
             <aside className="side-stack">
-              <RunbookLauncher onLaunch={handleLaunchRunbook} />
+              <RunbookLauncher runbooks={runbooksData} services={servicesData} pending={isBusy} onLaunch={handleLaunchRunbook} />
               <ServiceHealth services={serviceHealth} />
             </aside>
           </section>
         )}
 
-        {activePanel === "runbooks" && <RunbookLibrary onLaunch={handleLaunchRunbook} />}
+        {activePanel === "runbooks" && (
+          <RunbookLibrary runbooks={runbooksData} services={servicesData} pending={isBusy} onLaunch={handleLaunchRunbook} />
+        )}
         {activePanel === "services" && <ServiceBoard services={serviceHealth} />}
         {activePanel === "reports" && <Reports incidents={incidents} />}
       </main>
@@ -298,7 +484,7 @@ export function RunbookStudio() {
   );
 }
 
-function IncidentQueue({ incidents, selectedIncidentId, onSelect }) {
+function IncidentQueue({ incidents, selectedIncidentId, services, teamMembers, onSelect }) {
   return (
     <section className="panel incident-queue" aria-labelledby="incident-queue-heading">
       <div className="panel-heading">
@@ -310,8 +496,8 @@ function IncidentQueue({ incidents, selectedIncidentId, onSelect }) {
 
       <div className="queue-list">
         {incidents.map((incident) => {
-          const service = findService(incident.serviceId);
-          const commander = findMember(incident.commanderId);
+          const service = findService(services, incident.serviceId);
+          const commander = findMember(teamMembers, incident.commanderId);
 
           return (
             <button
@@ -340,6 +526,8 @@ function IncidentWorkspace({
   service,
   commander,
   progress,
+  teamMembers,
+  pending,
   resolveError,
   noteDraft,
   onNoteDraft,
@@ -375,7 +563,12 @@ function IncidentWorkspace({
           </div>
         </div>
 
-        <button className="resolve-button" type="button" onClick={onResolve} disabled={!readyToResolve || incident.status === "resolved"}>
+        <button
+          className="resolve-button"
+          type="button"
+          onClick={onResolve}
+          disabled={pending || !readyToResolve || incident.status === "resolved"}
+        >
           <ShieldCheck size={18} aria-hidden="true" />
           <span>{incident.status === "resolved" ? "Resolved" : "Resolve"}</span>
         </button>
@@ -411,7 +604,12 @@ function IncidentWorkspace({
               </div>
 
               <div className="step-controls">
-                <select value={step.assigneeId ?? ""} onChange={(event) => onAssignee(step.id, event.target.value || null)} aria-label={`Assign ${step.title}`}>
+                <select
+                  value={step.assigneeId ?? ""}
+                  onChange={(event) => onAssignee(step.id, event.target.value || null)}
+                  aria-label={`Assign ${step.title}`}
+                  disabled={pending}
+                >
                   <option value="">Unassigned</option>
                   {teamMembers.map((member) => (
                     <option key={member.id} value={member.id}>
@@ -429,6 +627,7 @@ function IncidentWorkspace({
                         className={step.status === status.id ? "active" : ""}
                         type="button"
                         onClick={() => onStepStatus(step.id, status.id)}
+                        disabled={pending}
                       >
                         <Icon size={14} aria-hidden="true" />
                         <span>{status.label}</span>
@@ -448,15 +647,16 @@ function IncidentWorkspace({
               onChange={(event) => onNoteDraft(event.target.value)}
               placeholder="Add incident note"
               rows={3}
+              disabled={pending}
             />
-            <button type="submit" aria-label="Add note">
+            <button type="submit" aria-label="Add note" disabled={pending || !noteDraft.trim()}>
               <Send size={17} aria-hidden="true" />
             </button>
           </form>
 
           <div className="timeline" aria-label="Timeline">
             {incident.notes.map((note) => {
-              const author = findMember(note.authorId);
+              const author = findMember(teamMembers, note.authorId);
 
               return (
                 <article className="timeline-item note" key={note.id}>
@@ -471,7 +671,7 @@ function IncidentWorkspace({
             })}
 
             {incident.timeline.map((event) => {
-              const actor = findMember(event.actorId);
+              const actor = findMember(teamMembers, event.actorId);
 
               return (
                 <article className="timeline-item" key={event.id}>
@@ -491,7 +691,7 @@ function IncidentWorkspace({
   );
 }
 
-function RunbookLauncher({ onLaunch }) {
+function RunbookLauncher({ runbooks, services, pending, onLaunch }) {
   return (
     <section className="panel compact-panel" aria-labelledby="launcher-heading">
       <div className="panel-heading">
@@ -506,9 +706,9 @@ function RunbookLauncher({ onLaunch }) {
           <article className="runbook-row" key={runbook.id}>
             <div>
               <strong>{runbook.title}</strong>
-              <span>{findService(runbook.serviceId)?.name} / {runbook.defaultSeverity}</span>
+              <span>{findService(services, runbook.serviceId)?.name} / {runbook.defaultSeverity}</span>
             </div>
-            <button type="button" onClick={() => onLaunch(runbook)} aria-label={`Launch ${runbook.title}`}>
+            <button type="button" onClick={() => onLaunch(runbook)} aria-label={`Launch ${runbook.title}`} disabled={pending}>
               <Plus size={16} aria-hidden="true" />
             </button>
           </article>
@@ -543,17 +743,17 @@ function ServiceHealth({ services: serviceHealth }) {
   );
 }
 
-function RunbookLibrary({ onLaunch }) {
+function RunbookLibrary({ runbooks, services, pending, onLaunch }) {
   return (
     <section className="library-grid" aria-label="Runbook library">
       {runbooks.map((runbook) => (
         <article className="panel library-card" key={runbook.id}>
           <div className="library-card-header">
             <div>
-              <p className="eyebrow">{findService(runbook.serviceId)?.name}</p>
+              <p className="eyebrow">{findService(services, runbook.serviceId)?.name}</p>
               <h2>{runbook.title}</h2>
             </div>
-            <button type="button" onClick={() => onLaunch(runbook)} aria-label={`Launch ${runbook.title}`}>
+            <button type="button" onClick={() => onLaunch(runbook)} aria-label={`Launch ${runbook.title}`} disabled={pending}>
               <Plus size={17} aria-hidden="true" />
             </button>
           </div>
@@ -636,6 +836,10 @@ function Reports({ incidents }) {
 }
 
 function StatusBadge({ value }) {
+  if (!value) {
+    return null;
+  }
+
   const label = {
     active: "Active",
     monitoring: "Monitoring",
@@ -653,14 +857,18 @@ function StatusBadge({ value }) {
 }
 
 function SeverityBadge({ value }) {
+  if (!value) {
+    return null;
+  }
+
   return <span className={`severity-badge severity-${value.toLowerCase()}`}>{value}</span>;
 }
 
-function findService(id) {
+function findService(services, id) {
   return services.find((service) => service.id === id);
 }
 
-function findMember(id) {
+function findMember(teamMembers, id) {
   return teamMembers.find((member) => member.id === id);
 }
 

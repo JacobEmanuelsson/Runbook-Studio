@@ -111,8 +111,9 @@ async function seed() {
         resolvedAt: incident.resolvedAt,
         summary: incident.summary || null,
         steps: {
-          create: incident.steps.map((step) => ({
+          create: incident.steps.map((step, index) => ({
             id: step.id,
+            position: index + 1,
             title: step.title,
             detail: step.detail,
             role: step.role,
@@ -165,4 +166,3 @@ function roleForMember(memberId) {
 function toSeverityEnum(value) {
   return value.replace("-", "_");
 }
-

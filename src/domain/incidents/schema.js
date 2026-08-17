@@ -18,8 +18,17 @@ export const updateStepSchema = z.object({
   assigneeId: z.string().trim().min(1).nullable().optional(),
 });
 
+export const assignStepSchema = z.object({
+  incidentId: z.string().trim().min(1),
+  stepId: z.string().trim().min(1),
+  assigneeId: z.string().trim().min(1).nullable(),
+});
+
 export const incidentNoteSchema = z.object({
   incidentId: z.string().trim().min(1),
   body: z.string().trim().min(1).max(2_000),
 });
 
+export const resolveIncidentSchema = z.object({
+  incidentId: z.string().trim().min(1),
+});

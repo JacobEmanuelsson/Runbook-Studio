@@ -116,6 +116,7 @@ model Incident {
 model IncidentStep {
   id          String      @id @default(cuid())
   incidentId  String
+  position    Int         @default(0)
   title       String
   detail      String
   role        String

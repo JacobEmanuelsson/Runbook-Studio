@@ -160,6 +160,37 @@ button:disabled {
   gap: 10px;
 }
 
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mode-chip.saved {
+  border-color: #a8ded7;
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.app-alert {
+  margin: -4px 0 16px;
+  border: 1px solid #f3b7c4;
+  border-radius: 8px;
+  background: var(--rose-soft);
+  color: var(--rose);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--muted);
