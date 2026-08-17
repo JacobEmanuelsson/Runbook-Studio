@@ -50,7 +50,9 @@ npm run test:e2e
 
 ## Database Setup
 
-Copy `.env.example` to `.env` and configure `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
+Copy `.env.example` to `.env` and configure `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
+
+For Prisma Postgres, use the pooled URL for `DATABASE_URL` and the direct URL for `DIRECT_URL`.
 
 For a local or hosted PostgreSQL database:
 
