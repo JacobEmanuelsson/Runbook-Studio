@@ -1,0 +1,11 @@
+{
+  "region": "eu-central-1",
+  "app": {
+    "name": "runbook-studio",
+    "framework": "nextjs",
+    "httpPort": 3000,
+    "build": {
+      "command": "npm run build"
+    }
+  }
+}
