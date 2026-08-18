@@ -21,12 +21,18 @@ export default function SignInPage() {
   const [hasInvite, setHasInvite] = useState(false);
 
   useEffect(() => {
-    const nextHasInvite = new URLSearchParams(window.location.search).has("invite");
+    const searchParams = new URLSearchParams(window.location.search);
+    const nextHasInvite = searchParams.has("invite");
+    const nextMode = searchParams.get("mode");
     let cancelled = false;
 
     queueMicrotask(() => {
       if (!cancelled) {
         setHasInvite(nextHasInvite);
+
+        if (nextHasInvite || nextMode === "sign-up") {
+          setMode("sign-up");
+        }
       }
     });
 
@@ -44,13 +50,13 @@ export default function SignInPage() {
       ? await authClient.signIn.email({
         email: formState.email,
         password: formState.password,
-        callbackURL: "/",
+        callbackURL: "/workspace",
       })
       : await authClient.signUp.email({
         name: formState.name,
         email: formState.email,
         password: formState.password,
-        callbackURL: "/",
+        callbackURL: "/workspace",
       });
 
     setPending(false);
@@ -60,7 +66,7 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/");
+    router.push("/workspace");
     router.refresh();
   }
 

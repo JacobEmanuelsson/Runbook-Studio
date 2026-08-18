@@ -1,7 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-test("loads the incident command dashboard", async ({ page }) => {
+test("loads the landing page with clear entry paths", async ({ page }) => {
   await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Runbook Studio" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Explore demo" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create account", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open saved workspace" })).toBeVisible();
+});
+
+test("loads the demo incident command dashboard", async ({ page }) => {
+  await page.goto("/demo");
 
   await expect(page.getByRole("heading", { name: "Incident command" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Incidents" })).toBeVisible();

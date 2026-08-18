@@ -19,6 +19,7 @@ Runbook Studio is a fullstack incident runbook workspace for operational teams. 
 - Database seed script for the same demo workspace shown in the UI.
 - Pure workflow rules covered by Node tests.
 - Playwright smoke test for the core dashboard surface.
+- Landing page with explicit demo, create-account, and sign-in entry paths.
 
 ## Stack
 
@@ -41,7 +42,7 @@ npm run db:generate
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` for the landing page. Use `/demo` for the premade local workspace and `/workspace` for a saved authenticated workspace.
 
 Run checks:
 
@@ -69,7 +70,7 @@ npm run db:migrate
 npm run seed
 ```
 
-Without a signed-in database session, the app falls back to the local demo dashboard. After sign-in, Runbook Studio creates a workspace for the user, copies the starter services/runbooks, and saves incident and runbook workflows through Prisma-backed server actions.
+Without a database connection, `/workspace` redirects to the local demo. After sign-in, Runbook Studio creates a workspace for the user, copies the starter services/runbooks, and saves incident and runbook workflows through Prisma-backed server actions.
 
 ## Production Readiness
 
@@ -78,7 +79,7 @@ Deploy with these production environment variables:
 - `DATABASE_URL`: pooled Prisma Postgres connection string.
 - `DIRECT_URL`: direct Prisma Postgres connection string for migrations and smoke cleanup.
 - `BETTER_AUTH_SECRET`: long random secret, different from local development.
-- `BETTER_AUTH_URL`: exact deployed origin, for example `https://runbook-studio.example.com`.
+- `BETTER_AUTH_URL`: optional exact deployed origin for custom domains. Vercel preview and production `*.vercel.app` hosts are allowed dynamically.
 
 Apply database migrations before starting production traffic:
 

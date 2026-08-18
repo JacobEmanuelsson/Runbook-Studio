@@ -60,11 +60,13 @@ import {
   getStepProgress,
 } from "@/lib/incident-metrics";
 import {
-  initialIncidents as demoIncidents,
-  runbooks as demoRunbooks,
-  services as demoServices,
-  teamMembers as demoTeamMembers,
-} from "@/lib/sample-data";
+  DEMO_USER_ID,
+  demoDashboard,
+  demoIncidents,
+  demoRunbooks,
+  demoServices,
+  demoTeamMembers,
+} from "@/lib/demo-dashboard";
 import {
   addIncidentNote,
   assignStep,
@@ -76,23 +78,6 @@ import {
 } from "@/lib/runbook-workflow";
 
 const STORAGE_KEY = "runbook-studio-state-v1";
-const DEMO_USER_ID = "maya";
-const demoDashboard = {
-  organization: null,
-  currentMembership: {
-    id: DEMO_USER_ID,
-    name: "Maya Chen",
-    role: "owner",
-    roleValue: "OWNER",
-    initials: "MC",
-  },
-  services: demoServices,
-  runbooks: demoRunbooks,
-  incidents: demoIncidents,
-  teamMembers: demoTeamMembers,
-  teamInvitations: [],
-};
-
 const panels = [
   { id: "command", label: "Command", icon: Radio },
   { id: "runbooks", label: "Runbooks", icon: BookOpen },
@@ -762,6 +747,7 @@ export function RunbookStudio({ currentUser = null, dashboard = demoDashboard, l
       authClient
         .signOut()
         .then(() => {
+          router.push("/");
           router.refresh();
         })
         .catch((error) => {
